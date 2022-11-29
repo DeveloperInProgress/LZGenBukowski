@@ -4,8 +4,6 @@ const { ethers } = require("hardhat")
 describe("ONFT721: ", function () {
     const chainId_A = 1
     const chainId_B = 2
-    const name = "OmnichainNonFungibleToken"
-    const symbol = "ONFT"
 
     let owner, warlock, lzEndpointMockA, lzEndpointMockB, LZEndpointMock, ONFT, ONFT_A, ONFT_B
 
@@ -13,7 +11,7 @@ describe("ONFT721: ", function () {
         owner = (await ethers.getSigners())[0]
         warlock = (await ethers.getSigners())[1]
         LZEndpointMock = await ethers.getContractFactory("LZEndpointMock")
-        ONFT = await ethers.getContractFactory("ONFT721Mock")
+        ONFT = await ethers.getContractFactory("GenBukowski")
     })
 
     beforeEach(async function () {
@@ -21,8 +19,15 @@ describe("ONFT721: ", function () {
         lzEndpointMockB = await LZEndpointMock.deploy(chainId_B)
 
         // generate a proxy to allow it to go ONFT
-        ONFT_A = await ONFT.deploy(name, symbol, lzEndpointMockA.address)
-        ONFT_B = await ONFT.deploy(name, symbol, lzEndpointMockB.address)
+        ONFT_A = await ONFT.deploy(lzEndpointMockA.address)
+        
+        const activateSaleTxA = await ONFT_A.flipSaleIsActive();
+        activateSaleTxA.wait() 
+
+        ONFT_B = await ONFT.deploy(lzEndpointMockB.address)
+
+        const activateSaleTxB = await ONFT_B.flipSaleIsActive();
+        activateSaleTxB.wait() 
 
         // wire the lz endpoints to guide msgs back and forth
         lzEndpointMockA.setDestLzEndpoint(ONFT_B.address, lzEndpointMockB.address)
@@ -34,8 +39,8 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - your own tokens", async function () {
-        const tokenId = 123
-        await ONFT_A.mint(owner.address, tokenId)
+        const tokenId = 0
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // verify the owner of the token is on the source chain
         expect(await ONFT_A.ownerOf(tokenId)).to.be.equal(owner.address)
@@ -91,8 +96,8 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - reverts if not owner on non proxy chain", async function () {
-        const tokenId = 123
-        await ONFT_A.mint(owner.address, tokenId)
+        const tokenId = 0
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // approve the proxy to swap your token
         await ONFT_A.approve(ONFT_A.address, tokenId)
@@ -123,8 +128,8 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - on behalf of other user", async function () {
-        const tokenId = 123
-        await ONFT_A.mint(owner.address, tokenId)
+        const tokenId = 0
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // approve the proxy to swap your token
         await ONFT_A.approve(ONFT_A.address, tokenId)
@@ -163,8 +168,8 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - reverts if contract is approved, but not the sending user", async function () {
-        const tokenId = 123
-        await ONFT_A.mint(owner.address, tokenId)
+        const tokenId = 0
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // approve the proxy to swap your token
         await ONFT_A.approve(ONFT_A.address, tokenId)
@@ -198,8 +203,8 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - reverts if not approved on non proxy chain", async function () {
-        const tokenId = 123
-        await ONFT_A.mint(owner.address, tokenId)
+        const tokenId = 0
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // approve the proxy to swap your token
         await ONFT_A.approve(ONFT_A.address, tokenId)
@@ -230,11 +235,11 @@ describe("ONFT721: ", function () {
     })
 
     it("sendFrom() - reverts if sender does not own token", async function () {
-        const tokenIdA = 123
-        const tokenIdB = 456
+        const tokenIdA = 0
+        const tokenIdB = 1
         // mint to both owners
-        await ONFT_A.mint(owner.address, tokenIdA)
-        await ONFT_A.mint(warlock.address, tokenIdB)
+        await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
+        await ONFT_A.connect(warlock).mintGenBukowski({value: ethers.utils.parseEther('0.06', 'wei')})
 
         // approve owner.address to transfer, but not the other
         await ONFT_A.setApprovalForAll(ONFT_A.address, true)
