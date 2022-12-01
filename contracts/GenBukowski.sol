@@ -39,13 +39,16 @@ contract GenBukowski is ONFT721 {
         }
     }
 
+    function  isWhitelisted(address _addr) external view returns (bool) {
+        return whitelist[_addr];
+    }
+
     function flipSaleIsActive() external onlyOwner {
         saleIsActive = !saleIsActive;
     }
 
     function reserveMintGenBukowski() external {
         require(whitelist[msg.sender], "sender not whitelisted");
-        require(totalSupply < 10, "supply limit exceeded");
         totalSupply++;
         whitelist[msg.sender] = false;
         _safeMint(msg.sender, totalSupply-1);

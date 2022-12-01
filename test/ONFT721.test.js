@@ -5,11 +5,12 @@ describe("ONFT721: ", function () {
     const chainId_A = 1
     const chainId_B = 2
 
-    let owner, warlock, lzEndpointMockA, lzEndpointMockB, LZEndpointMock, ONFT, ONFT_A, ONFT_B
+    let owner, warlock, lockwar, lzEndpointMockA, lzEndpointMockB, LZEndpointMock, ONFT, ONFT_A, ONFT_B
 
     before(async function () {
         owner = (await ethers.getSigners())[0]
         warlock = (await ethers.getSigners())[1]
+        lockwar = (await ethers.getSigners())[2]
         LZEndpointMock = await ethers.getContractFactory("LZEndpointMock")
         ONFT = await ethers.getContractFactory("GenBukowski")
     })
@@ -36,6 +37,125 @@ describe("ONFT721: ", function () {
         // set each contracts source address so it can send to each other
         await ONFT_A.setTrustedRemote(chainId_B, ethers.utils.solidityPack(["address", "address"], [ONFT_B.address, ONFT_A.address]))
         await ONFT_B.setTrustedRemote(chainId_A, ethers.utils.solidityPack(["address", "address"], [ONFT_A.address, ONFT_B.address]))
+    })
+
+    describe("edit whitelist", async function () {
+        it("owner can edit whitelist - 2 address", async function () {
+            const editWLTx = await ONFT_A.editWhiteList([
+                warlock.address,
+                lockwar.address
+            ]);
+            editWLTx.wait();
+
+            expect(await ONFT_A.isWhitelisted(warlock.address)).to.be.true;
+            expect(await ONFT_A.isWhitelisted(lockwar.address)).to.be.true;
+        });
+
+        it("owner cannot edit whitelist - more than 2 address", async function () {
+            const editWLTx = ONFT_A.editWhiteList([
+                owner.address,
+                warlock.address,
+                lockwar.address
+            ]);
+            
+            await expect(editWLTx).to.be.revertedWith('Whitelist space unavailable');
+        });
+
+        it("non owner cannot edit whitelist", async function() {
+            const editWLTx = ONFT_A.connect(warlock).editWhiteList([
+                warlock.address,
+                lockwar.address
+            ]);
+            
+            await expect(editWLTx).to.be.revertedWith('Ownable: caller is not the owner');
+        });
+
+        it("cannot duplicate whitelist additions", async function() {
+            const editWLTx = await ONFT_A.editWhiteList([
+                warlock.address,
+            ]); 
+            editWLTx.wait();
+
+            const editWLTx2 = await ONFT_A.editWhiteList([
+                warlock.address,
+            ]); 
+            editWLTx2.wait();
+
+            expect(await ONFT_A.whitelistSpaceAvailable()).equals(1);
+        })
+    });
+
+    describe("flipSaleIsActive()", async function () {
+        it("owner can flip saleIsActive", async function () {
+            const flipTx = await ONFT_A.flipSaleIsActive();
+            flipTx.wait();
+        
+            expect(await ONFT_A.saleIsActive()).to.be.false;
+        });
+
+        it("non owner cannot flip saleIsActive", async function () {
+            const flipTx = ONFT_A.connect(warlock).flipSaleIsActive();
+        
+            await expect(flipTx).to.be.revertedWith('Ownable: caller is not the owner')
+        });
+    })
+
+    describe("reserveMintGenBukowski()", async function () {
+        it('whitelisted can reserve mint', async function () {
+            const editWLTx = await ONFT_A.editWhiteList([
+                warlock.address,
+            ]);
+            editWLTx.wait();
+            
+            const mintTx = await ONFT_A.connect(warlock).reserveMintGenBukowski();
+            mintTx.wait();
+
+            expect(await ONFT_A.ownerOf(0)).equals(warlock.address);
+        });
+
+        it('non whitelisted cannot reserve mint', async function() {
+            const mintTx = ONFT_A.connect(warlock).reserveMintGenBukowski();
+            await expect(mintTx).to.be.revertedWith("sender not whitelisted");
+        });
+
+        it('whitelisted cannot mint twice', async function () {
+            const editWLTx = await ONFT_A.editWhiteList([
+                warlock.address,
+            ]);
+            editWLTx.wait();
+            
+            const mintTx = await ONFT_A.connect(warlock).reserveMintGenBukowski();
+            mintTx.wait();
+
+            const mintTx2 = ONFT_A.connect(warlock).reserveMintGenBukowski();
+
+            await expect(mintTx2).to.be.revertedWith("sender not whitelisted");
+        });
+    });
+
+    describe("mintGenBukowski()", async function () {
+        it('can mint gen bukowski with value >= 0.06 ETH', async function() {
+              const mintTx = await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther("0.06")});
+              mintTx.wait();
+
+              expect(await ONFT_A.ownerOf(0)).equals(owner.address);
+        });
+
+        it('cannot mint gen bukowski with value < 0.06 ETH', async function() {
+            const mintTx = ONFT_A.mintGenBukowski({value: ethers.utils.parseEther("0.05")});
+            await expect(mintTx).to.be.revertedWith("Ether value sent is not correct");
+        });
+
+        it('cannot mint more than MAX_STANDARD_GENBUKOWSKI tokens', async function() {
+            const max = await ONFT_A.MAX_STANDARD_GENBUKOWSKI();
+            for(let i = 0; i < max; i++) {
+                const mintTx = await ONFT_A.mintGenBukowski({value: ethers.utils.parseEther("0.06")});
+                mintTx.wait();
+            }
+            const mintTx = ONFT_A.mintGenBukowski({value: ethers.utils.parseEther("0.06")});
+
+            await expect(mintTx).to.be.revertedWith("Purchase would exceed max supply of Gen Bukowski");
+        });
     })
 
     it("sendFrom() - your own tokens", async function () {
